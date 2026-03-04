@@ -1,5 +1,5 @@
 streamlit>=1.33
-pandas>=2.0
+pandas>=2.2.2
 openpyxl>=3.1
 xlsxwriter>=3.1
 xlrd>=2.0.1
