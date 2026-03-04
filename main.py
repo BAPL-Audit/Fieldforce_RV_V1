@@ -212,21 +212,36 @@ if uploaded_files and st.button("Generate Consolidated Report", type="primary"):
 
     engine = _pick_excel_engine()
     if engine is None:
-        st.error("Excel export dependency missing: install either 'xlsxwriter' or 'openpyxl'.")
-        st.stop()
+        st.warning(
+            "Excel writer dependency missing (`xlsxwriter`/`openpyxl`). "
+            "Providing CSV ZIP fallback download."
+        )
 
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine=engine) as writer:
-        consolidated_df.to_excel(writer, index=False, sheet_name="Consolidated")
-        policy_df.to_excel(writer, index=False, sheet_name="Policy_Check")
-        _style_output_workbook(writer, engine)
-    output.seek(0)
+        csv_zip = BytesIO()
+        with ZipFile(csv_zip, "w") as zf:
+            zf.writestr("consolidated.csv", consolidated_df.to_csv(index=False))
+            zf.writestr("policy_check.csv", policy_df.to_csv(index=False))
+        csv_zip.seek(0)
 
-    st.download_button(
-        "Download Consolidated Report (.xlsx)",
-        data=output,
-        file_name="Dynamic_Expense_Report.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+        st.download_button(
+            "Download Report (CSV ZIP)",
+            data=csv_zip,
+            file_name="Dynamic_Expense_Report.zip",
+            mime="application/zip",
+        )
+    else:
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine=engine) as writer:
+            consolidated_df.to_excel(writer, index=False, sheet_name="Consolidated")
+            policy_df.to_excel(writer, index=False, sheet_name="Policy_Check")
+            _style_output_workbook(writer, engine)
+        output.seek(0)
+
+        st.download_button(
+            "Download Consolidated Report (.xlsx)",
+            data=output,
+            file_name="Dynamic_Expense_Report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 elif not uploaded_files:
     st.info("Upload one or more files and click 'Generate Consolidated Report'.")
