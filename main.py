@@ -210,13 +210,9 @@ if uploaded_files and st.button("Generate Consolidated Report", type="primary"):
         st.subheader("Failed / Skipped Files with Reason")
         st.json(failed_files)
 
-    engine = _pick_excel_engine()
-    if engine is None:
-        st.warning(
-            "Excel writer dependency missing (`xlsxwriter`/`openpyxl`). "
-            "Providing CSV ZIP fallback download."
-        )
-
+    def _render_csv_zip_download(message: str | None = None):
+        if message:
+            st.warning(message)
         csv_zip = BytesIO()
         with ZipFile(csv_zip, "w") as zf:
             zf.writestr("consolidated.csv", consolidated_df.to_csv(index=False))
@@ -229,19 +225,30 @@ if uploaded_files and st.button("Generate Consolidated Report", type="primary"):
             file_name="Dynamic_Expense_Report.zip",
             mime="application/zip",
         )
-    else:
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine=engine) as writer:
-            consolidated_df.to_excel(writer, index=False, sheet_name="Consolidated")
-            policy_df.to_excel(writer, index=False, sheet_name="Policy_Check")
-            _style_output_workbook(writer, engine)
-        output.seek(0)
 
-        st.download_button(
-            "Download Consolidated Report (.xlsx)",
-            data=output,
-            file_name="Dynamic_Expense_Report.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    engine = _pick_excel_engine()
+    if engine is None:
+        _render_csv_zip_download(
+            "Excel engine not available in this environment; using CSV ZIP fallback."
         )
+    else:
+        try:
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine=engine) as writer:
+                consolidated_df.to_excel(writer, index=False, sheet_name="Consolidated")
+                policy_df.to_excel(writer, index=False, sheet_name="Policy_Check")
+                _style_output_workbook(writer, engine)
+            output.seek(0)
+
+            st.download_button(
+                "Download Consolidated Report (.xlsx)",
+                data=output,
+                file_name="Dynamic_Expense_Report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        except Exception as exc:
+            _render_csv_zip_download(
+                f"Excel export unavailable ({exc.__class__.__name__}); using CSV ZIP fallback."
+            )
 elif not uploaded_files:
     st.info("Upload one or more files and click 'Generate Consolidated Report'.")
