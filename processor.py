@@ -338,7 +338,10 @@ def _compute_policy_allowance(designation: str, txn_df: pd.DataFrame, numeric_ca
 def _open_excel_with_fallback(file_name: str, file_bytes: bytes) -> pd.ExcelFile:
     ext = file_name.lower().rsplit(".", 1)[-1] if "." in file_name else ""
 
-    has_calamine = importlib.util.find_spec("python_calamine") is not None
+    has_calamine = (
+        importlib.util.find_spec("python_calamine") is not None
+        or importlib.util.find_spec("calamine") is not None
+    )
     has_openpyxl = importlib.util.find_spec("openpyxl") is not None
     has_xlrd = importlib.util.find_spec("xlrd") is not None
 
@@ -376,6 +379,12 @@ def _open_excel_with_fallback(file_name: str, file_bytes: bytes) -> pd.ExcelFile
             return pd.ExcelFile(BytesIO(file_bytes), engine=engine)
         except Exception as exc:
             errors.append(f"{engine or 'auto'}: {exc}")
+
+    if not deduped_candidates:
+        raise ValueError(
+            "No Excel reader engine is available. Install dependencies from requirements.txt "
+            "(openpyxl/xlrd/python-calamine)."
+        )
 
     raise ValueError("Unable to read workbook with available engines. " + " | ".join(errors))
 
