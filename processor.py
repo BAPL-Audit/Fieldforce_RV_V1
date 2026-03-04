@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import importlib.util
 import re
 from dataclasses import dataclass
 from io import BytesIO
@@ -334,12 +335,57 @@ def _compute_policy_allowance(designation: str, txn_df: pd.DataFrame, numeric_ca
     }
 
 
+def _open_excel_with_fallback(file_name: str, file_bytes: bytes) -> pd.ExcelFile:
+    ext = file_name.lower().rsplit(".", 1)[-1] if "." in file_name else ""
+
+    has_calamine = importlib.util.find_spec("python_calamine") is not None
+    has_openpyxl = importlib.util.find_spec("openpyxl") is not None
+    has_xlrd = importlib.util.find_spec("xlrd") is not None
+
+    engine_candidates: list[str | None] = []
+    if ext == "xlsx":
+        if has_calamine:
+            engine_candidates.append("calamine")
+        if has_openpyxl:
+            engine_candidates.append("openpyxl")
+    elif ext == "xls":
+        if has_calamine:
+            engine_candidates.append("calamine")
+        if has_xlrd:
+            engine_candidates.append("xlrd")
+    else:
+        if has_calamine:
+            engine_candidates.append("calamine")
+        if has_openpyxl:
+            engine_candidates.append("openpyxl")
+        if has_xlrd:
+            engine_candidates.append("xlrd")
+        engine_candidates.append(None)
+
+    # keep order but drop duplicates
+    seen = set()
+    deduped_candidates = []
+    for eng in engine_candidates:
+        if eng not in seen:
+            deduped_candidates.append(eng)
+            seen.add(eng)
+
+    errors: list[str] = []
+    for engine in deduped_candidates:
+        try:
+            return pd.ExcelFile(BytesIO(file_bytes), engine=engine)
+        except Exception as exc:
+            errors.append(f"{engine or 'auto'}: {exc}")
+
+    raise ValueError("Unable to read workbook with available engines. " + " | ".join(errors))
+
+
 def process_expense_file(file_name: str, file_bytes: bytes) -> FileProcessResult:
     try:
         if not file_bytes:
             return FileProcessResult(file_name, None, set(), "Empty file.")
 
-        excel = pd.ExcelFile(BytesIO(file_bytes))
+        excel = _open_excel_with_fallback(file_name, file_bytes)
         _, raw_df, header_row = _choose_best_sheet(excel)
         header_values = _dedupe_headers([_normalize_header(v, idx) for idx, v in enumerate(raw_df.iloc[header_row].tolist())])
 
